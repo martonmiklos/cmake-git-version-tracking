@@ -284,37 +284,41 @@ endfunction()
 #   _working_dir    (in)  string; the directory from which git commands will be ran.
 #   _state_changed (out)    bool; whether or no the state of the repo has changed.
 function(CheckGit _working_dir _state_changed)
+    if(EXISTS "${_working_dir}/.git")
+        # Get the current state of the repo.
+        GetGitState("${_working_dir}")
 
-    # Get the current state of the repo.
-    GetGitState("${_working_dir}")
+        # Convert that state into a hash that we can compare against
+        # the hash stored on-disk.
+        HashGitState(state)
 
-    # Convert that state into a hash that we can compare against
-    # the hash stored on-disk.
-    HashGitState(state)
+        # Issue 14: post-configure file isn't being regenerated.
+        #
+        # Update the state to include the SHA256 for the pre-configure file.
+        # This forces the post-configure file to be regenerated if the
+        # pre-configure file has changed.
+        file(SHA256 ${PRE_CONFIGURE_FILE} preconfig_hash)
+        string(SHA256 state "${preconfig_hash}${state}")
 
-    # Issue 14: post-configure file isn't being regenerated.
-    #
-    # Update the state to include the SHA256 for the pre-configure file.
-    # This forces the post-configure file to be regenerated if the
-    # pre-configure file has changed.
-    file(SHA256 ${PRE_CONFIGURE_FILE} preconfig_hash)
-    string(SHA256 state "${preconfig_hash}${state}")
-
-    # Check if the state has changed compared to the backup on disk.
-    if(EXISTS "${GIT_STATE_FILE}")
-        file(READ "${GIT_STATE_FILE}" OLD_HEAD_CONTENTS)
-        if(OLD_HEAD_CONTENTS STREQUAL "${state}")
-            # State didn't change.
-            set(${_state_changed} "false" PARENT_SCOPE)
-            return()
+        # Check if the state has changed compared to the backup on disk.
+        if(EXISTS "${GIT_STATE_FILE}")
+            file(READ "${GIT_STATE_FILE}" OLD_HEAD_CONTENTS)
+            if(OLD_HEAD_CONTENTS STREQUAL "${state}")
+                # State didn't change.
+                set(${_state_changed} "false" PARENT_SCOPE)
+                return()
+            endif()
         endif()
-    endif()
 
-    # The state has changed.
-    # We need to update the state file on disk.
-    # Future builds will compare their state to this file.
-    file(WRITE "${GIT_STATE_FILE}" "${state}")
-    set(${_state_changed} "true" PARENT_SCOPE)
+        # The state has changed.
+        # We need to update the state file on disk.
+        # Future builds will compare their state to this file.
+        file(WRITE "${GIT_STATE_FILE}" "${state}")
+        set(${_state_changed} "true" PARENT_SCOPE)
+    else()
+        set(ENV{GIT_RETRIEVED_STATE} "false")
+        set(ENV{GIT_IS_DIRTY} "false")
+    endif()
 endfunction()
 
 
